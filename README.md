@@ -77,15 +77,26 @@ with Codebase('codebase.zip'):
 
 Using UniqueCodebase, we can load as many versions of a codebase as we want, and they can interact with each other.
 
+The import notation is a little less clean, but it's necessary to avoid conflicts.
+
 ```python
-from codesave import ZipCodebase
-codebase1 = ZipCodebase('codebase.zip')
-codebase2 = ZipCodebase('codebase_v2.zip')
-codebase1._from('src', 'model' _as='model_v1')
-# equivalent to (from src import model as model_v1) from codebase.zip
-codebase2._from('src', 'model' _as='model_v2')
-# equivalent to (from src import model as model_v2) from codebase_v2.zip
+from codesave import UniqueCodebase
+codebase1 = UniqueCodebase('codebase.zip')
+codebase2 = UniqueCodebase('codebase_v2.zip')
+model_v1 = codebase1.import_module('src.model') # equivalent to (from src import model as model_v1) from codebase.zip
+model_v2 = codebase2.import_module('src.model') # equivalent to (from src import model as model_v2) from codebase_v2.zip
 ```
+
+There are some syntactic sugar options (these do some magic juju to automatically assign the module to a variable)
+
+```
+codebase1.import_('src.model') # equivalent to `import src.model`
+codebase1.import_('src.model', as_='model_v1') # equivalent to `import src.model as model_v1`
+codebase1.from_import('src', ('model', 'utils')) # equivalent to `from src import model, utils`
+codebase1.from_import('src', 'model', as_='model_v1') # equivalent to `from src import model as model_v1`
+
+```
+
 
 ### Just Unzip It
 

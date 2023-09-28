@@ -204,6 +204,7 @@ class Codebase:
         Removes the codebase from the path. But existing imported modules will still work.
         """
         sys.path.remove(self.zip_name)
+        importlib.invalidate_caches()
 
     def __enter__(self):
         pass
@@ -279,42 +280,41 @@ class UniqueCodebase:
     def library_name(self):
         return self._library_name
 
-    def import_(self, name, _as=None):
-        """ """
-        print("Trying to import ", f"{self.library_name}.{name}")
-        lib = importlib.import_module(f"{self.library_name}.{name}")
-        if _as is None:
-            _as = name
-            if (
-                "." in name
-            ):  # Dealing with the fact that import a.b should return a, not b
-                _as = name.split(".")[0]
-                lib = importlib.import_module(f"{self.library_name}.{_as}")
-        calling_locals = inspect.stack()[1].frame.f_locals
-        calling_locals[_as] = lib
-
     def import_module(self, name):
         """
         Replicates the behavior of `importlib.import_module`.
         """
 
-        print("Trying to import ", f"{self.library_name}.{name}")
         return importlib.import_module(f"{self.library_name}.{name}")
 
-    def from_import(self, name, things_to_import, _as=None):
+    def import_(self, name, as_=None):
+        """ """
+        print("Importing ", f"{self.library_name}.{name}")
+        lib = importlib.import_module(f"{self.library_name}.{name}")
+        if as_ is None:
+            as_ = name
+            if (
+                "." in name
+            ):  # Dealing with the fact that import a.b should return a, not b
+                as_ = name.split(".")[0]
+                lib = importlib.import_module(f"{self.library_name}.{as_}")
+        calling_locals = inspect.stack()[1].frame.f_locals
+        calling_locals[as_] = lib
+
+    def from_import(self, name, things_to_import, as_=None):
         module = self.import_module(name)
         if isinstance(things_to_import, str):
             things_to_import = [things_to_import]
 
         calling_locals = inspect.stack()[1].frame.f_locals
-        if _as is not None:
+        if as_ is not None:
             assert len(things_to_import) == 1
-            _as = {_as: things_to_import[0]}
+            as_ = {as_: things_to_import[0]}
         else:
-            _as = {t: t for t in things_to_import}
+            as_ = {t: t for t in things_to_import}
 
         ret = []
-        for ass, thing in _as.items():
+        for ass, thing in as_.items():
             try:
                 calling_locals[ass] = getattr(module, thing)
             except:
@@ -326,6 +326,7 @@ class UniqueCodebase:
 
     def close(self):
         sys.path.remove(self.zip_name)
+        importlib.invalidate_caches()
 
     def __enter__(self):
         return self
