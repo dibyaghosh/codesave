@@ -1,7 +1,7 @@
 # Codesave
 
 
-### TL;DR
+## TL;DR
 
 ```python
 ### When training
@@ -17,7 +17,7 @@ with Codebase(zipname):
     model.whatever_you_want
 ```
 
-### Installation:
+## Installation:
 
 ```
 pip install codesave_library 
@@ -27,7 +27,7 @@ pip install codesave_library
 pip install git+https://github.com/dibyaghosh/codesave.git
 ```
 
-### Basic Usage
+## Basic Usage
 
 The easiest way to use codesave is using `checkpoint` or `checkpoint_to_wandb`, which will take all the files in the directory and create a zip file.
 
@@ -54,7 +54,7 @@ sys.path.append('codebase.zip')
 import src.model # This will load the library directly from the zip file
 ```
 
-# Loading a Codebase
+## Loading a Codebase
 
 ### Using `sys.path`
 
@@ -91,9 +91,9 @@ model_v1 = codebase1.import_module('src.model') # equivalent to (from src import
 model_v2 = codebase2.import_module('src.model') # equivalent to (from src import model as model_v2) from codebase_v2.zip
 ```
 
-There are some syntactic sugar options (these do some magic juju to automatically assign the module to a variable)
+There are some syntactic sugar options which do some magic juju to automatically assign the module to a variable w/out needing to do explicit assignment
 
-```
+```python
 codebase1.import_('src.model') # equivalent to `import src.model`
 codebase1.import_('src.model', as_='model_v1') # equivalent to `import src.model as model_v1`
 codebase1.from_import('src', ('model', 'utils')) # equivalent to `from src import model, utils`
@@ -109,15 +109,47 @@ You can always unzip the zip file, and treat it as a normal directory.
 ## Integration w/ wandb
 
 When training,
-```
+```python
 from codesave import checkpoint_codebase_for_wandb
 wandb.init(...)
 checkpoint_codebase_for_wandb('codebase/')
 ```
 
 Now at any point,
-```
+```python
 from codesave import load_codebase_from_wandb
 load_codebase_from_wandb(wandb_run_name, output_zipname='codesave.zip')
 # Now we can add to sys.path or ZipCodebase as before
+```
+
+## API
+
+```python
+# These provide general routines to save codebase
+from .routines import (
+    checkpoint,  # Save codebase to a zip file
+    checkpoint_to_wandb,  # Save codebase to a zip file and upload to wandb
+)
+
+# These allow you to load a codebase from a zip file
+from .base import (
+    Codebase,  # Easy load code from a zip file
+    UniqueCodebase,  # General way to load code from a zip file
+)
+
+# These are routines to download codebase from wandb
+from .routines import (
+    download_from_wandb,  # download something saved with checkpoint_to_wandb
+    zip_from_wandb_artifact,  # download something saved with wandb.run.log_code
+)
+```
+
+```python
+def checkpoint(main_folder, output_zipname=None, extra_libraries=tuple(), extra_pythonpath=tuple(),
+                ignore=tuple(), ignore_patterns=tuple(), py_only=False, ignore_larger_than=None, verbose=True,):
+    # Saves a codebase to a zip file
+
+def checkpoint_to_wandb(main_folder, output_directory=None, extra_libraries=tuple(), extra_pythonpath=tuple(),
+                ignore=tuple(), ignore_patterns=tuple(), py_only=False, ignore_larger_than=None, verbose=True,):
+    # Saves a codebase to output_directory/codebase.zip file and uploads it to wandb
 ```
