@@ -24,6 +24,7 @@ def checkpoint(
     output_zipname=None,
     extra_libraries=tuple(),
     extra_pythonpath=tuple(),
+    ignore=tuple(),
     ignore_patterns=tuple(),
     py_only=False,
     ignore_larger_than=None,  # e.g. "1M"
@@ -33,11 +34,13 @@ def checkpoint(
 
     Arguments:
         main_folder: Everything in this folder will be saved to the zip file. This directory will be
-            what gets added to the python path when the codebase is loaded again.
+            what gets added to the python path when the codebase is loaded again. Set to None if you
+            only want to specify extra_libraries.
         extra_libraries: Extra libraries (either files / folders) to add to the zip file. These libraries will effectively
           be placed *within* the main_folder when the codebase is loaded again, so make sure you choose the right folder level.
         extra_pythonpath: Every folder in this list will be searched for python libraries to add to the codebase.
             Recommended to not use this, as searching for libraries in a large folder can be *very* slow.
+        ignore: A list of ignore filters to apply to the files. See shutil.ignore_patterns for more info.
         ignore_patterns: Files matching any of these glob patterns will be ignored.
         py_only: If True, only .py files will be saved.
         ignore_larger_than: Files larger than this will be ignored. Useful to avoid saving large files like datasets or checkpoints.
@@ -58,6 +61,9 @@ def checkpoint(
 
     """
     assert output_zipname is not None, "output_zipname must be specified"
+    assert (
+        main_folder is not None or len(extra_libraries) > 0
+    ), "either main_folder or extra_libraries must be specified"
 
     verbose_print = print if verbose else lambda *args, **kwargs: None
     all_libs = {}
@@ -70,23 +76,24 @@ def checkpoint(
         all_libs[path.stem] = path
 
     all_files = list(all_libs.values())
-    all_files.extend(
-        glob.glob(str(Path(main_folder).expanduser().resolve() / "*"), recursive=True)
-    )
+    if main_folder is not None:
+        main_folder = Path(main_folder).expanduser().resolve()
+        main_libs = _get_python_libraries(main_folder)
+        all_libs.update(main_libs)
+        all_files.extend(glob.glob(str(main_folder / "*")))
 
     verbose_print("All files: ", all_files)
     verbose_print("All libs: ", all_libs.keys())
 
-    ignore = []
     if len(ignore_patterns) > 0:
         verbose_print("Ignoring patterns: ", ignore_patterns)
-        ignore.append(shutil_filters.ignore_patterns(ignore_patterns))
+        ignore += (shutil_filters.ignore_patterns(ignore_patterns),)
     if py_only:
         verbose_print("Ignoring all py files")
-        ignore.append(shutil_filters.include_only_patterns("*.py"))
+        ignore += (shutil_filters.include_only_patterns("*.py"),)
     if ignore_larger_than is not None:
         verbose_print("Ignoring files larger than: ", ignore_larger_than)
-        ignore.append(shutil_filters.ignore_larger_than(ignore_larger_than))
+        ignore += (shutil_filters.ignore_larger_than(ignore_larger_than),)
 
     if len(ignore) > 0:
         ignore = shutil_filters.chain(*ignore)
@@ -107,6 +114,7 @@ def checkpoint_to_wandb(
     output_directory=None,
     extra_libraries=tuple(),
     extra_pythonpath=tuple(),
+    ignore=tuple(),
     ignore_patterns=tuple(),
     py_only=False,
     ignore_larger_than="100K",  # Be conservative by default for wandb, since the file needs to be uploaded
@@ -132,6 +140,7 @@ def checkpoint_to_wandb(
         extra_pythonpath=extra_pythonpath,
         extra_libraries=extra_libraries,
         output_zipname=output_zipname,
+        ignore=ignore,
         ignore_patterns=ignore_patterns,
         py_only=py_only,
         ignore_larger_than=ignore_larger_than,

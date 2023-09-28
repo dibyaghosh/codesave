@@ -3,13 +3,13 @@ import tempfile
 import sys
 import shutil
 import datetime
-import glob
 import importlib
 from pathlib import Path
 import zipfile
 from typing import Union, List, Callable
 import json
 import fnmatch
+import pkg_resources
 
 
 def create_zip(
@@ -65,8 +65,11 @@ def create_zip(
         if library_names is None:
             all_pyfiles = map(str, main_dir.glob("**/*.py"))
             library_names = _get_library_names(all_pyfiles, index=0)
-            with open(main_dir / "library_names.json", "w") as f:
-                json.dump(library_names, f)
+        with open(main_dir / "library_names.json", "w") as f:
+            json.dump(library_names, f)
+        with open(main_dir / "packages.txt", "w") as f:
+            for lib in pkg_resources.working_set:
+                f.write(repr(lib) + "\n")
 
         shutil.make_archive(
             str(output_zipname)[:-4],
