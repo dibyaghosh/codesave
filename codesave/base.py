@@ -177,12 +177,14 @@ class ZipCodebase:
 
     """
 
-    def __init__(self, zip_name: str, verbose: bool = False, make_unique: bool = False):
+    def __init__(self, zip_name: str, verbose: bool = False, make_unique: bool = True):
         if make_unique:
             tmp_name = tempfile.mktemp(suffix=".zip")
             print("Making unique copy of ", zip_name, " at ", tmp_name)
             create_unique_zip(zip_name, tmp_name, verbose=verbose)
             zip_name = tmp_name
+        else:
+            print("Are you sure you already ran `create_unique_zip`?")
 
         with zipfile.ZipFile(zip_name, "r") as zip:
             all_files = zip.namelist()
