@@ -1,5 +1,22 @@
 # Codesave
 
+
+### TL;DR
+
+```python
+### When training
+from codesave import checkpoint_to_wandb
+wandb.init(...)
+checkpoint_to_wandb(codebase_dirname)
+
+### Time to recover
+from codesave import Codebase, download_from_wandb
+zipname = download_from_wandb(wandb_run_path)
+with Codebase(zipname):
+    from src import model
+    model.whatever_you_want
+```
+
 ### Installation:
 
 ```
@@ -8,7 +25,7 @@ pip install git+https://github.com/dibyaghosh/codesave.git
 
 ### Basic Usage
 
-The easiest way to use codesave is using `checkpoint_codebase`, which will take all the files in the directory and create a zip file.
+The easiest way to use codesave is using `checkpoint` or `checkpoint_to_wandb`, which will take all the files in the directory and create a zip file.
 
 For example, suppose we have some repository with the following structure:
 
@@ -20,11 +37,12 @@ For example, suppose we have some repository with the following structure:
         eval.py
 
 ```
-from codesave import checkpoint_codebase
-checkpoint_codebase('codebase/', output_zipname='codebase.zip')
+from codesave import checkpoint, checkpoint_to_wandb
+checkpoint('codebase/', output_zipname='codebase.zip')
+checkpoint_to_wandb('codebase/') # Stores it in the current wandb run (on the cloud)
 ```
 
-Then, anywhere else  (even if we don't have codesave installed), we can do:
+This creates a zipfile that we can use anywhere else  (even if we don't have codesave installed):
 
 ```
 import sys
@@ -32,11 +50,34 @@ sys.path.append('codebase.zip')
 import src.model # This will load the library directly from the zip file
 ```
 
-### Loading multiple versions of a codebase
+# Loading a Codebase
 
-We can even load multiple versions of a codebase (this requires codesave to be installed though)
+### Using `sys.path`
 
+The easiest way, doesn't require `codesave` to be installed
+
+```python
+import sys
+sys.path.append('codebase.zip') # Or PYTHONPATH=codebase.zip:$PYTHONPATH
+import src.model # This will load the library directly from the zip file
 ```
+
+### Using `Codebase`
+
+The second easiest way, but **cannot be run multiple times in the same process** (because old modules are not unloaded)
+
+```python
+from codesave import Codebase
+with Codebase('codebase.zip'):
+    from src import model
+    model.whatever_you_want
+```
+
+### Using `UniqueCodebase` (general, recommended)
+
+Using UniqueCodebase, we can load as many versions of a codebase as we want, and they can interact with each other.
+
+```python
 from codesave import ZipCodebase
 codebase1 = ZipCodebase('codebase.zip')
 codebase2 = ZipCodebase('codebase_v2.zip')
@@ -46,7 +87,11 @@ codebase2._from('src', 'model' _as='model_v2')
 # equivalent to (from src import model as model_v2) from codebase_v2.zip
 ```
 
-### Integration w/ wandb
+### Just Unzip It
+
+You can always unzip the zip file, and treat it as a normal directory.
+
+## Integration w/ wandb
 
 When training,
 ```

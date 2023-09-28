@@ -9,15 +9,14 @@ from pathlib import Path
 import zipfile
 from typing import Union, List, Callable
 import json
-
-_is_pycache = lambda fname: fname.endswith(".pyc")
+import fnmatch
 
 
 def create_zip(
-    files_and_folders: Union[List, str],
+    files_and_folders: Union[List[Path], Path, str],
     output_zipname: str,
     library_names=None,
-    ignore_file_patterns: List[Callable[[str], bool]] = (_is_pycache,),
+    ignore: Callable = None,
     verbose: bool = True,
 ):
     """Creates a zipfile of your codebase, for reference and to investigate!
@@ -34,9 +33,7 @@ def create_zip(
         output_zipname: The name of the zip file to create
         library_names: A list of libraries that can be imported.
             If None, will be inferred from the files_and_folders
-        ignore_file_patterns: A list of filtering functions. Each element should
-          be a function that takes a filename and returns True if it should be ignored.
-          By default, we ignore pycache folders.
+        ignore: A filtering function that will be passed to `shutil.copytree` to ignore files.
     """
 
     verbose_print = print if verbose else lambda *a, **k: None
@@ -54,27 +51,29 @@ def create_zip(
         for og_dir in files_and_folders:
             target_dir = main_dir / og_dir.name
             verbose_print("Copying code from {} to {}".format(og_dir, target_dir))
+            if ignore is not None:
+                if ignore(str(og_dir.parent), [og_dir.name]):
+                    verbose_print("Ignoring ", og_dir)
+                    continue
+
             if og_dir.is_file():
                 shutil.copy(og_dir, target_dir)
             else:
-                shutil.copytree(og_dir, target_dir, dirs_exist_ok=True)
+                shutil.copytree(og_dir, target_dir, dirs_exist_ok=True, ignore=ignore)
 
         verbose_print("Creating zip file at {}".format(output_zipname))
-        with zipfile.ZipFile(output_zipname, "w") as zip:
-            files_to_add = glob.glob(str(main_dir / "**"), recursive=True)
-            files_to_add = [
-                f
-                for f in files_to_add
-                if not any([pattern(f) for pattern in ignore_file_patterns])
-            ]
-            for file in files_to_add:
-                new_name = Path(file).relative_to(main_dir)
-                zip.write(file, arcname=new_name)
+        if library_names is None:
+            all_pyfiles = map(str, main_dir.glob("**/*.py"))
+            library_names = _get_library_names(all_pyfiles, index=0)
+            with open(main_dir / "library_names.json", "w") as f:
+                json.dump(library_names, f)
 
-            if library_names is None:
-                library_names = _get_library_names(zip.namelist())
-            zip.writestr("library_names.json", json.dumps(library_names))
-
+        shutil.make_archive(
+            str(output_zipname)[:-4],
+            "zip",
+            root_dir=main_dir,
+            verbose=verbose,
+        )
     print("Saved codebase to ", output_zipname)
 
 
@@ -130,35 +129,99 @@ def create_unique_zip(
                         library_names,
                         new_pattern=lambda library: f"{prefix}.{library}",
                         old_pattern=lambda library: f"{library}",
-                        verbose=True,
                     )
                     new_zip.writestr(info, s)
 
-            newzip_files = new_zip.namelist()
-            necessary_inits = set()
-            for file in newzip_files:
-                if file.endswith(
-                    ".py"
-                ):  # add __init__.py to all folders leading up to this file
-                    all_parts = file.split("/")
-                    for i in range(1, len(all_parts) - 1):
-                        necessary_inits.add("/".join(all_parts[:i] + ["__init__.py"]))
-            for init in necessary_inits:
-                if init not in newzip_files:
-                    new_zip.writestr(init, "")
-                    verbose_print("Adding  ", init)
+            if add_init:
+                newzip_files = new_zip.namelist()
+                necessary_inits = set()
+                for file in newzip_files:
+                    if file.endswith(
+                        ".py"
+                    ):  # add __init__.py to all folders leading up to this file
+                        all_parts = file.split("/")
+                        for i in range(1, len(all_parts) - 1):
+                            necessary_inits.add(
+                                "/".join(all_parts[:i] + ["__init__.py"])
+                            )
+                for init in necessary_inits:
+                    if init not in newzip_files:
+                        new_zip.writestr(init, "")
+                        verbose_print("Adding  ", init)
+
     print("Saved unique codebase to ", output_zipname)
 
 
-class ZipCodebase:
+class Codebase:
+    _ran_already = False
     """
-    A codebase that you can use with the output of `create_unique_zip`.
+    A codebase that you can use with the output of `create_zip`.
+    Be careful about making multiple Codebases in a single script,
+    as caching may cause you to ignore the new codebase. Use UniqueCodebase
+    to handle these use-cases.
 
-    Once a ZipCodebase is created, you can import from it in a few ways:
+    Usage:
+    > with Codebase('codebase.zip'):
+        import src.models
+    > # Imports won't work after this
+
+    or
+    > cs = Codebase('codebase.zip')
+    > import src.models
+    > cs.close() # Imports won't work after this
+
+    """
+
+    def __init__(self, zip_name: str, verbose: bool = False):
+        with zipfile.ZipFile(zip_name, "r") as zip:
+            all_files = zip.namelist()
+
+        self.zip_name = zip_name
+        self.valid_libraries = list(
+            set(
+                [
+                    f.replace(".py", "").split("/")[0]
+                    for f in all_files
+                    if ".py" in f and "__init__" not in f.split("/")[1]
+                ]
+            )
+        )
+
+        if verbose:
+            print("Found libraries in codebase: ", self.valid_libraries)
+        sys.path.insert(0, self.zip_name)
+        if Codebase._ran_already:
+            print(
+                "Warning: "
+                "You have already made a Codebase."
+                "Creating more codebases may cause issues."
+                "Use UniqueCodebase to handle these use-cases."
+            )
+        Codebase._ran_already = True
+
+    def close(self):
+        """
+        Removes the codebase from the path. But existing imported modules will still work.
+        """
+        sys.path.remove(self.zip_name)
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+
+class UniqueCodebase:
+    """
+    A codebase so that you can load multiple versions of the same codebase,
+    or multiple codebases at the same time.
+
+    Once a UniqueCodebase is created, you can import from it in a few ways:
 
     ```
     create_zip('codesave.py', 'test.zip')
-    cs = ZipCodebase('test.zip')
+    cs = UniqueCodebase('test.zip')
 
     # Equivalent to `import codesave`
     cs._import('codesave')
@@ -190,7 +253,10 @@ class ZipCodebase:
             all_files = zip.namelist()
             self._library_name = all_files[0].split("/")[0]
 
+        self.zip_name = zip_name
         sys.path.insert(0, zip_name)
+        importlib.invalidate_caches()
+
         self.valid_libraries = list(
             set(
                 [
@@ -213,7 +279,7 @@ class ZipCodebase:
     def library_name(self):
         return self._library_name
 
-    def _import(self, name, _as=None):
+    def import_(self, name, _as=None):
         """ """
         print("Trying to import ", f"{self.library_name}.{name}")
         lib = importlib.import_module(f"{self.library_name}.{name}")
@@ -235,7 +301,7 @@ class ZipCodebase:
         print("Trying to import ", f"{self.library_name}.{name}")
         return importlib.import_module(f"{self.library_name}.{name}")
 
-    def _from_import(self, name, things_to_import, _as=None):
+    def from_import(self, name, things_to_import, _as=None):
         module = self.import_module(name)
         if isinstance(things_to_import, str):
             things_to_import = [things_to_import]
@@ -247,11 +313,25 @@ class ZipCodebase:
         else:
             _as = {t: t for t in things_to_import}
 
+        ret = []
         for ass, thing in _as.items():
             try:
                 calling_locals[ass] = getattr(module, thing)
             except:
                 calling_locals[ass] = self.import_module(name + "." + thing)
+            ret.append(calling_locals[ass])
+        if len(ret) == 1:
+            return ret[0]
+        return ret
+
+    def close(self):
+        sys.path.remove(self.zip_name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
 
 
 def _fix_all_imports(
@@ -259,7 +339,6 @@ def _fix_all_imports(
     libraries,
     new_pattern,
     old_pattern=lambda library: f"{library}",
-    verbose=True,
 ):
     all_changes = []
     for library in libraries:
@@ -273,14 +352,6 @@ def _fix_all_imports(
     for old_string, new_string in all_changes:
         new_s = new_s.replace(old_string, new_string)
     return new_s
-    # if verbose:
-    #     for l1, l2 in zip(s.split("\n"), new_s.split("\n")):
-    #         if l1 != l2:
-    #             print(f"< {l1} \n> {l2}")
-
-    if not dry:
-        with open(file_path, "w") as f:
-            f.write(new_s)
 
 
 def _get_library_names(all_fnames, index=0):
@@ -294,3 +365,61 @@ def _get_library_names(all_fnames, index=0):
     return list(
         set([f.split("/")[index].replace(".py", "") for f in all_fnames if ".py" in f])
     )
+
+
+class shutil_filters:
+    # Factory functions for creating filters for shutil.copytree
+
+    @staticmethod
+    def chain(*fns):
+        def chained_fn(path, names):
+            excluded = set()
+            for fn in fns:
+                excluded.update(fn(path, names))
+            return list(excluded)
+
+        return chained_fn
+
+    @staticmethod
+    def ignore_larger_than(size):
+        if isinstance(size, str):
+            try:
+                size, modifier = int(size[:-1]), size[-1].lower()
+                modifier = {"k": 1e3, "m": 1e6, "g": 1e9}[modifier]
+                size *= modifier
+            except:
+                raise ValueError(
+                    "Could not parse size argument. Expected something like '1k', '10m', '1g'"
+                )
+
+        def fn(path, names):
+            excluded_names = []
+            for name in names:
+                name_path = Path(path) / name
+                if name_path.is_file() and name_path.stat().st_size > size:
+                    excluded_names.append(name)
+            return excluded_names
+
+        return fn
+
+    @staticmethod
+    def ignore_patterns(*glob_patterns):
+        return shutil.ignore_patterns(*glob_patterns)
+
+    @staticmethod
+    def include_only_patterns(*glob_patterns):
+        def fn(path, names):
+            excluded_names = []
+            for name in names:
+                name_path = Path(path) / name
+                if name_path.is_file():
+                    if not any(
+                        [
+                            fnmatch.fnmatch(name_path, glob_pattern)
+                            for glob_pattern in glob_patterns
+                        ]
+                    ):
+                        excluded_names.append(name)
+            return excluded_names
+
+        return fn
