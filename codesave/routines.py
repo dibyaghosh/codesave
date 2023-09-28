@@ -156,9 +156,9 @@ def checkpoint_to_wandb(
 
 
 def download_from_wandb(
-    wandb_path=None,
-    wandb_filename="codebase.zip",
+    wandb_path,
     output_zipname=None,
+    wandb_filename="codebase.zip",
     api=None,
 ):
     """
@@ -176,4 +176,55 @@ def download_from_wandb(
     with tempfile.TemporaryDirectory() as tmpdirname:
         file.download(tmpdirname)
         shutil.copy2(Path(tmpdirname) / wandb_filename, output_zipname)
+    return output_zipname
+
+
+def zip_from_wandb_artifact(wandb_path, output_zipname=None, api=None):
+    """Creates a zip from a wandb.run.log_code() artifact.
+
+    Useful if you want to create a codebase.zip file from a run that didn't use codesave.
+    The logging run must have run something like:
+        > wandb.init(...)
+        > wandb.run.log_code(root="my_code_folder")
+
+        or
+        > wandb.init(..., save_code=True, settings=wandb.Settings(code_dir="my_code_folder"))
+
+    Returns the output_zipname.
+    """
+    if api is None:
+        import wandb
+
+        api = wandb.Api()
+    run = api.run(wandb_path)
+
+    artifacts = []
+    for artifact in run.logged_artifacts():
+        if "source" in artifact.name:
+            artifacts.append(artifact)
+    assert len(artifacts) != 0, "No source artifact found"
+    assert len(artifacts) < 2, "More than one source artifact found"
+    artifact = artifacts[0]
+
+    print(
+        "Artifact details:",
+        {
+            "name": artifact.name,
+            "type": artifact.type,
+            "created_at": artifact.created_at,
+            "updated_at": artifact.updated_at,
+            "version": artifact.version,
+            "size": artifact.size,
+        },
+    )
+
+    output_zipname = output_zipname or tempfile.mktemp(suffix=".zip")
+
+    with tempfile.TemporaryDirectory() as dir_name:
+        artifact.download(dir_name)
+        checkpoint(
+            main_folder=dir_name,
+            output_zipname=output_zipname,
+            verbose=False,
+        )
     return output_zipname
