@@ -20,6 +20,10 @@ with Codebase(zipname):
 ### Installation:
 
 ```
+pip install code-save
+```
+
+```
 pip install git+https://github.com/dibyaghosh/codesave.git
 ```
 
