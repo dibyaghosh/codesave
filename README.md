@@ -13,21 +13,23 @@ The easiest way to use codesave is using `checkpoint_codebase`, which will take 
 For example, suppose we have some repository with the following structure:
 
     codebase/
-        model.py
+        src/
+            model.py
+            utils.py
         train.py
         eval.py
 
 ```
 from codesave import checkpoint_codebase
-checkpoint_codebase('codebase/', output_zipname='codesave.zip')
+checkpoint_codebase('codebase/', output_zipname='codebase.zip')
 ```
 
 Then, anywhere else  (even if we don't have codesave installed), we can do:
 
 ```
 import sys
-sys.path.append('codesave.zip')
-import model # This will load the library directly from the zip file
+sys.path.append('codebase.zip')
+import src.model # This will load the library directly from the zip file
 ```
 
 ### Loading multiple versions of a codebase
@@ -36,12 +38,12 @@ We can even load multiple versions of a codebase (this requires codesave to be i
 
 ```
 from codesave import ZipCodebase
-codebase1 = ZipCodebase('codesave.zip')
-codebase2 = ZipCodebase('codesave_v2.zip')
-codebase1._import('model', _as='model_v1')
-# model_v1 is now the model library from codesave.zip
-codebase2._import('model', _as='model_v2')
-# model_v2 is now the model library from codesave_v2.zip
+codebase1 = ZipCodebase('codebase.zip')
+codebase2 = ZipCodebase('codebase_v2.zip')
+codebase1._from('src', 'model' _as='model_v1')
+# equivalent to (from src import model as model_v1) from codebase.zip
+codebase2._from('src', 'model' _as='model_v2')
+# equivalent to (from src import model as model_v2) from codebase_v2.zip
 ```
 
 ### Integration w/ wandb

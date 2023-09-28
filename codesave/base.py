@@ -235,16 +235,23 @@ class ZipCodebase:
         print("Trying to import ", f"{self.library_name}.{name}")
         return importlib.import_module(f"{self.library_name}.{name}")
 
-    def _from_import(self, name, things_to_import):
+    def _from_import(self, name, things_to_import, _as=None):
         module = self.import_module(name)
         if isinstance(things_to_import, str):
             things_to_import = [things_to_import]
+
         calling_locals = inspect.stack()[1].frame.f_locals
-        for thing in things_to_import:
+        if _as is not None:
+            assert len(things_to_import) == 1
+            _as = {_as: things_to_import[0]}
+        else:
+            _as = {t: t for t in things_to_import}
+
+        for ass, thing in _as.items():
             try:
-                calling_locals[thing] = getattr(module, thing)
+                calling_locals[ass] = getattr(module, thing)
             except:
-                calling_locals[thing] = self.import_module(name + "." + thing)
+                calling_locals[ass] = self.import_module(name + "." + thing)
 
 
 def _fix_all_imports(
