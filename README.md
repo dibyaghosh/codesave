@@ -5,7 +5,7 @@
 
 ```bash
 codesave --codebase=. --output=codebase.zip
-codesave --wandb_artifact="orca-value-learning/orca/orca_bridge_20231017_055324" -o test.zip 
+codesave --wandb_artifact="wandb_username/project_name/run_id" -o test.zip 
 ```
 
 ```python
