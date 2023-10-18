@@ -137,9 +137,9 @@ def checkpoint_to_wandb(
     output_zipname = output_directory / codebase_zipname
     checkpoint(
         main_folder=main_folder,
+        output_zipname=output_zipname,
         extra_pythonpath=extra_pythonpath,
         extra_libraries=extra_libraries,
-        output_zipname=output_zipname,
         ignore=ignore,
         ignore_patterns=ignore_patterns,
         py_only=py_only,

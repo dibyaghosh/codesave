@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codesave_library"
-version = "0.0.1"
+version = "0.0.3"
 authors = [
   { name="Dibya Ghosh", email="dibya.ghosh@berkeley.edu" },
 ]
@@ -16,6 +16,9 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+
+[project.scripts]
+codesave = "codesave.app:main"
 
 [project.urls]
 "Homepage" = "https://github.com/dibyaghosh/codesave"
