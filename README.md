@@ -3,6 +3,11 @@
 
 ## TL;DR
 
+```bash
+codesave --codebase=. --output=codebase.zip
+codesave --wandb_artifact="orca-value-learning/orca/orca_bridge_20231017_055324" -o test.zip 
+```
+
 ```python
 ### When training
 from codesave import checkpoint_to_wandb
