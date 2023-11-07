@@ -11,6 +11,27 @@ import json
 import fnmatch
 import pkg_resources
 
+DEFAULT_MAIN = """
+import sys
+help_text = '''
+    This is a codebase saved with codesave. You can run files within it like:
+        python codebase.zip module_name:fn_name ...
+        python codebase.zip file.py ...
+'''
+print(sys.argv)
+assert len(sys.argv) >= 2, help_text
+module_name = sys.argv.pop(1)
+if ":" in module_name:
+    import importlib
+    module_name, fn_name = module_name.split(":")
+    module = importlib.import_module(module_name)
+    getattr(module, fn_name)()
+else:
+    import runpy
+    module_name = module_name.replace(".py", "").replace("/", ".")
+    print("Running ", module_name)
+    runpy.run_module(module_name)
+"""
 
 def create_zip(
     files_and_folders: Union[List[Path], Path, str],
@@ -24,8 +45,11 @@ def create_zip(
     The resulting zip file can be used as a backup of your codebase (just unzip it and you're good to go!)
     but it can also be used more directly:
 
-    export PYTHONPATH=$PYTHONPATH:$(pwd)/codebase.zip
-    # Now you can import libraries from codebase.zip
+        PYTHONPATH=codebase.zip python
+        >>> import src.models # You can import from the codebase!
+    
+    or
+        python codebase.zip train.py # You can run files within the codebase!
 
     Args:
         files_and_folders: A list of files and folders to include in the zip file.
@@ -70,13 +94,17 @@ def create_zip(
         with open(main_dir / "packages.txt", "w") as f:
             for lib in pkg_resources.working_set:
                 f.write(repr(lib) + "\n")
-
+        if not (main_dir / "__main__.py").exists():
+            with open(main_dir / "__main__.py", "w") as f:
+                f.write(DEFAULT_MAIN)
+            
         shutil.make_archive(
-            str(output_zipname)[:-4],
+            str(output_zipname),
             "zip",
             root_dir=main_dir,
             verbose=verbose,
         )
+        shutil.move(str(output_zipname) + ".zip", output_zipname)        
     print("Saved codebase to ", output_zipname)
 
 
@@ -153,6 +181,34 @@ def create_unique_zip(
                         verbose_print("Adding  ", init)
 
     print("Saved unique codebase to ", output_zipname)
+
+def change_launcher(zip_file: str, external_path: str = None,  internal_path: str = None, module_name: str = None):
+    """Makes the zip file runnable by adding a launcher.py file to it."""
+    assert sum([x is not  None for x in [external_path, module_name, internal_path]]) == 1, "Exactly one of external_path, module_name, internal_path must be provided."
+
+    tmp_name = None
+    with zipfile.ZipFile(zip_file, "r") as input_zip:    
+        if '__main__.py' in input_zip.namelist():
+            tmp_name = tempfile.mktemp(suffix=".zip")
+            with zipfile.ZipFile(tmp_name, "w") as output_zip:
+                for info in input_zip.infolist():
+                    if info.filename != '__main__.py':
+                        output_zip.writestr(info, input_zip.read(info.filename))
+
+    if tmp_name is not None:
+        shutil.move(tmp_name, zip_file)
+
+
+    with zipfile.ZipFile(zip_file, "a") as zf:
+        if external_path is not None:
+            launcher_path = Path(external_path).resolve()
+            zf.write(launcher_path, arcname="__main__.py")
+        elif internal_path is not None:
+            bytes = zf.read(internal_path)
+            zf.writestr("__main__.py", bytes)
+        elif module_name is not None:
+            launcher = """import runpy; runpy.run_module("{}")""".format(module_name)
+            zf.writestr("__main__.py", launcher)
 
 
 class Codebase:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codesave_library"
-version = "0.0.3"
+version = "0.0.4"
 authors = [
   { name="Dibya Ghosh", email="dibya.ghosh@berkeley.edu" },
 ]
@@ -18,7 +18,9 @@ classifiers = [
 ]
 
 [project.scripts]
-codesave = "codesave.app:main"
+codesave = "codesave.app:codesave_app"
+code_from_wandb = "codesave.app:wandb_app"
+make_pyz = "codesave.app:make_pyz_app"
 
 [project.urls]
 "Homepage" = "https://github.com/dibyaghosh/codesave"

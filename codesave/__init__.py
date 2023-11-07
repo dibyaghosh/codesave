@@ -2,6 +2,7 @@
 from .routines import (
     checkpoint,  # Save codebase to a zip file
     checkpoint_to_wandb,  # Save codebase to a zip file and upload to wandb
+    WandBCodebase,  # Load codebase directly from wandb
 )
 
 # These allow you to load a codebase from a zip file

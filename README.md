@@ -4,8 +4,8 @@
 ## TL;DR
 
 ```bash
-codesave --codebase=. --output=codebase.zip
-codesave --wandb_artifact="wandb_username/project_name/run_id" -o test.zip 
+codesave . -o codebase.zip
+code_from_wandb "wandb_username/project_name/run_id" -o codesave.zip 
 ```
 
 ```python
@@ -13,11 +13,11 @@ codesave --wandb_artifact="wandb_username/project_name/run_id" -o test.zip
 from codesave import checkpoint_to_wandb
 wandb.init(...)
 checkpoint_to_wandb(codebase_dirname)
+# or wandb.run.log_code(codebase_dirname)
 
 ### Time to recover
-from codesave import Codebase, download_from_wandb
-zipname = download_from_wandb(wandb_run_path)
-with Codebase(zipname):
+from codesave import WandBCodebase
+with WandBCodebase("wandb_username/project_name/run_id"):
     from src import model
     model.whatever_you_want
 ```

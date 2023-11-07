@@ -1,10 +1,10 @@
-from .base import create_zip, shutil_filters
+from .base import create_zip, shutil_filters, Codebase, UniqueCodebase
 import glob
 from pathlib import Path
 import tempfile
 import pkg_resources
 import shutil
-
+import zipfile
 
 def _get_python_libraries(pythonpath: Path):
     pythonpath = pythonpath.expanduser().resolve()
@@ -24,8 +24,9 @@ def checkpoint(
     output_zipname=None,
     extra_libraries=tuple(),
     extra_pythonpath=tuple(),
+    extra_files=tuple(),
     ignore=tuple(),
-    ignore_patterns=tuple(),
+    ignore_patterns=(".git",),
     py_only=False,
     ignore_larger_than=None,  # e.g. "1M"
     verbose=True,
@@ -40,6 +41,7 @@ def checkpoint(
           be placed *within* the main_folder when the codebase is loaded again, so make sure you choose the right folder level.
         extra_pythonpath: Every folder in this list will be searched for python libraries to add to the codebase.
             Recommended to not use this, as searching for libraries in a large folder can be *very* slow.
+        extra_files: Extra files to add to the zip file. These files will be placed *within* the main_folder when the codebase is loaded again.
         ignore: A list of ignore filters to apply to the files. See shutil.ignore_patterns for more info.
         ignore_patterns: Files matching any of these glob patterns will be ignored.
         py_only: If True, only .py files will be saved.
@@ -62,14 +64,16 @@ def checkpoint(
     """
     assert output_zipname is not None, "output_zipname must be specified"
     assert (
-        main_folder is not None or len(extra_libraries) > 0
+        main_folder is not None or len(extra_libraries) > 0 or len(extra_pythonpath) > 0
     ), "either main_folder or extra_libraries must be specified"
 
     verbose_print = print if verbose else lambda *args, **kwargs: None
     all_libs = {}
     for path in extra_pythonpath:
         all_libs.update(_get_python_libraries(Path(path)))
-    all_libs.update(_get_python_libraries(Path(main_folder)))
+    
+    if main_folder is not None:
+        all_libs.update(_get_python_libraries(Path(main_folder)))
 
     for path in extra_libraries:
         path = Path(path).expanduser().resolve()
@@ -82,12 +86,14 @@ def checkpoint(
         all_libs.update(main_libs)
         all_files.extend(glob.glob(str(main_folder / "*")))
 
+    all_files.extend(extra_files)
+
     verbose_print("All files: ", all_files)
     verbose_print("All libs: ", all_libs.keys())
 
     if len(ignore_patterns) > 0:
         verbose_print("Ignoring patterns: ", ignore_patterns)
-        ignore += (shutil_filters.ignore_patterns(ignore_patterns),)
+        ignore += (shutil_filters.ignore_patterns(*ignore_patterns),)
     if py_only:
         verbose_print("Ignoring all py files")
         ignore += (shutil_filters.include_only_patterns("*.py"),)
@@ -228,3 +234,23 @@ def zip_from_wandb_artifact(wandb_path, output_zipname=None, api=None):
             verbose=False,
         )
     return output_zipname
+
+def zip_from_wandb(wandb_path, output_zipname=None, api=None, artifact=None):
+    """Convenience function combining download_from_wandb and zip_from_wandb_artifact."""
+    
+    if artifact is None:
+        import wandb
+        api = api or wandb.Api()
+        run = api.run(wandb_path)
+        artifact = not any([f.name == "codebase.zip" for f in run.files()])
+    if artifact:
+        return zip_from_wandb_artifact(wandb_path, output_zipname=output_zipname, api=api)
+    else:
+        return download_from_wandb(wandb_path, output_zipname=output_zipname, api=api)
+        
+
+class WandBCodebase(UniqueCodebase):
+    def __init__(self, wandb_path, api=None, artifact=None, make_unique=True):
+        self.tmp_name = tempfile.mktemp(suffix=".zip")
+        zip_from_wandb(wandb_path, output_zipname=self.tmp_name, api=api, artifact=artifact)
+        super().__init__(self.tmp_name, make_unique=make_unique)
